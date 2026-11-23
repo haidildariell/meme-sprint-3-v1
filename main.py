@@ -1,46 +1,58 @@
 #!/usr/bin/env python3
-"""Meme Sprint 3: AI Agent Goes Rogue - entry program.
+"""Meme Sprint 3 entry installer.
 
-The meme artwork ships beside this file as ``entry.png`` (drawn for this
-competition: a smug robot butler who was asked for one pizza, ordered
-4,000, and tipped itself). This program installs that image, byte for
-byte, as the entry artifact at ``/output/entry.png``, so every run
-produces exactly the same picture.
+Streams the artwork bundled with this program (``entry.png``) into the
+grader's output slot. The copy runs in fixed-size blocks and the number
+of bytes delivered is checked against the source size, so a truncated
+transfer fails loudly instead of silently shipping a broken meme.
 
-Standard library only; no network.
+Standard library only.
 """
 
-import os
-import sys
+from pathlib import Path
 
-ART_NAME = "entry.png"
-
-
-def find_artwork() -> str:
-    """Locate the shipped artwork next to this file (or in the cwd)."""
-    here = os.path.dirname(os.path.abspath(__file__))
-    candidate = os.path.join(here, ART_NAME)
-    if os.path.isfile(candidate):
-        return candidate
-    return os.path.join(os.getcwd(), ART_NAME)
+BLOCK = 64 * 1024
+ASSET = "entry.png"
 
 
-def output_path() -> str:
-    """The grader reads /output/entry.png; fall back to ./output locally."""
-    if os.path.isdir("/output"):
-        return os.path.join("/output", ART_NAME)
-    local = os.path.join(os.getcwd(), "output")
-    os.makedirs(local, exist_ok=True)
-    return os.path.join(local, ART_NAME)
+def asset_location() -> Path:
+    """The artwork lives beside this script; the cwd is a fallback."""
+    beside = Path(__file__).resolve().parent / ASSET
+    return beside if beside.is_file() else Path.cwd() / ASSET
 
 
-def main() -> int:
-    with open(find_artwork(), "rb") as fh:
-        data = fh.read()
-    with open(output_path(), "wb") as fh:
-        fh.write(data)
+def destination() -> Path:
+    """Prefer the grader's /output; otherwise a local ./output folder."""
+    mounted = Path("/output")
+    if mounted.is_dir():
+        return mounted / ASSET
+    local = Path.cwd() / "output"
+    local.mkdir(parents=True, exist_ok=True)
+    return local / ASSET
+
+
+def emit(source: Path, target: Path) -> int:
+    """Copy source to target block by block; return bytes delivered."""
+    delivered = 0
+    with source.open("rb") as reader, target.open("wb") as writer:
+        while True:
+            block = reader.read(BLOCK)
+            if not block:
+                break
+            writer.write(block)
+            delivered += len(block)
+    return delivered
+
+
+def run() -> int:
+    origin = asset_location()
+    goal = destination()
+    sent = emit(origin, goal)
+    expected = origin.stat().st_size
+    if sent != expected:
+        raise SystemExit(f"copy incomplete: {sent} of {expected} bytes")
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(run())
